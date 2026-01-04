@@ -1,183 +1,300 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Real-Time Object Detection</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: Arial, sans-serif; 
-            background: linear-gradient(135deg, #f4f9fb 0%, #e8f4f8 100%); 
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            min-height: 100vh; padding: 20px;
-        }
-        h1 { color: #2c3e50; font-size: 2.5em; text-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .controls { margin-bottom: 20px; }
-        button { 
-            padding: 15px 30px; border: none; background: linear-gradient(45deg, #6ec7a1, #5aa893); 
-            color: white; font-size: 18px; border-radius: 30px; cursor: pointer; margin: 0 10px; 
-            box-shadow: 0 4px 15px rgba(110,199,161,0.4); transition: all 0.3s;
-        }
-        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(110,199,161,0.6); }
-        button:disabled { background: #bdc3c7; cursor: not-allowed; box-shadow: none; }
-        
-        .detection-area {
-            position: relative; width: 900px; height: 500px; margin: 0 auto;
-        }
-        
-        .video-container {
-            position: absolute; left: 0; top: 10px; width: 640px; height: 480px; 
-            border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); 
-            background: #ecf0f1; display: flex; align-items: center; justify-content: center;
-        }
-        
-        #video { width: 100%; height: 100%; border-radius: 20px; object-fit: cover; display: none; }
-        .camera-icon { font-size: 120px; color: #bdc3c7; display: block; }
-        
-        .counts-panel {
-            position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-            width: 200px; height: 200px; padding: 25px; background: rgba(255,255,255,0.98); 
-            border-radius: 25px; box-shadow: 0 10px 35px rgba(0,0,0,0.2); border: 3px solid rgba(110,199,161,0.4);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-size: 20px; font-weight: bold; color: #6ec7a1;
-        }
-        .counts-list { text-align: center; line-height: 1.4; }
-        .no-detection { color: #95a5a6; }
-        .detecting { color: #3498db; font-style: italic; }
-    </style>
+<meta charset="UTF-8">
+<title>Real-Time Object Detection</title>
+<style>
+/* Reset & Base */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    color: #34495e;
+}
+h1 {
+    font-size: 2.8em;
+    color: #1abc9c;
+    text-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+/* Controls */
+.controls { margin-bottom: 25px; }
+button {
+    padding: 14px 32px;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 600;
+    color: white;
+    margin: 0 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 6px 18px rgba(26, 188, 156, 0.4);
+    background: linear-gradient(135deg, #1abc9c, #16a085);
+}
+button:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(26, 188, 156, 0.6);
+}
+button:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Detection Area */
+.detection-area {
+    position: relative;
+    width: 900px;
+    height: 500px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.video-container {
+    position: absolute;
+    left: 0;
+    top: 10px;
+    width: 640px;
+    height: 480px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+    background: linear-gradient(145deg, #ffffff, #e0f7f4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+    border-radius: 20px;
+    transition: all 0.4s ease-in-out;
+}
+.camera-icon {
+    font-size: 120px;
+    color: #bdc3c7;
+    display: block;
+    transition: transform 0.3s ease, color 0.3s ease;
+}
+.camera-icon:hover {
+    transform: scale(1.1);
+    color: #95a5a6;
+}
+
+/* Counts Panel */
+.counts-panel {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 220px;
+    min-height: 200px;
+    padding: 25px;
+    background: rgba(255,255,255,0.97);
+    border-radius: 25px;
+    border: 3px solid rgba(26, 188, 156, 0.3);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    color: #16a085;
+    text-align: center;
+}
+.counts-list div {
+    margin: 6px 0;
+}
+.no-detection {
+    color: #95a5a6 !important;
+    font-style: italic;
+}
+.detecting {
+    color: #3498db;
+    font-style: italic;
+}
+
+/* Canvas overlay styling */
+canvas {
+    border-radius: 20px;
+    pointer-events: none;
+}
+
+/* Box & Label Styling */
+.overlay-box {
+    position: absolute;
+    border: 3px solid #00ff41;
+    border-radius: 6px;
+    pointer-events: none;
+}
+.overlay-label {
+    position: absolute;
+    background: rgba(0,255,65,0.9);
+    color: #000;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    pointer-events: none;
+}
+</style>
 </head>
 <body>
-    <h1>🔍 REAL-TIME OBJECT DETECTION</h1>
-    <div class="controls">
-        <button id="startBtn" onclick="startDetection()">▶️ Start Detection</button>
-        <button id="stopBtn" onclick="stopDetection()" disabled>⏹️ Stop Detection</button>
-    </div>
-    
-    <div class="detection-area">
-        <div class="video-container">
-            <video id="video" autoplay muted playsinline></video>
-            <div class="camera-icon" id="cameraIcon">📷</div>
-        </div>
-        <div class="counts-panel no-detection" id="counts">
-            <div class="counts-list">Click Start<br>to begin</div>
-        </div>
-    </div>
+<h1>REAL-TIME OBJECT DETECTION</h1>
+<div class="controls">
+    <button id="startBtn" onclick="startDetection()"> Start Detection</button>
+    <button id="stopBtn" onclick="stopDetection()" disabled>Stop Detection</button>
+</div>
 
-    <script>
-        let video = document.getElementById('video');
-        let cameraIcon = document.getElementById('cameraIcon');
-        let countsEl = document.getElementById('counts');
-        let startBtn = document.getElementById('startBtn');
-        let stopBtn = document.getElementById('stopBtn');
-        let stream = null;
-        let intervalId = null;
-        let canvasOverlay = null;
-        let ctxOverlay = null;
-        let inFlight = false;
+<div class="detection-area">
+    <div class="video-container">
+        <video id="video" autoplay muted playsinline></video>
+        <div class="camera-icon" id="cameraIcon">📷</div>
+    </div>
+    <div class="counts-panel no-detection" id="counts">
+        <div class="counts-list">Click Start<br>to begin</div>
+    </div>
+</div>
 
-        function showCameraIcon() {
-            video.style.display = 'none';
-            if (canvasOverlay && canvasOverlay.parentNode) canvasOverlay.parentNode.removeChild(canvasOverlay);
-            cameraIcon.style.display = 'block';
-            countsEl.innerHTML = '<div class="counts-list">Ready to<br>detect</div>'; 
+<script>
+let video = document.getElementById('video');
+let cameraIcon = document.getElementById('cameraIcon');
+let countsEl = document.getElementById('counts');
+let startBtn = document.getElementById('startBtn');
+let stopBtn = document.getElementById('stopBtn');
+let stream = null;
+let intervalId = null;
+let canvasOverlay = null;
+let ctxOverlay = null;
+let inFlight = false;
+
+function showCameraIcon() {
+    video.style.display = 'none';
+    if (canvasOverlay && canvasOverlay.parentNode) canvasOverlay.parentNode.removeChild(canvasOverlay);
+    cameraIcon.style.display = 'block';
+    countsEl.innerHTML = '<div class="counts-list">Ready to<br>detect</div>'; 
+    countsEl.classList.add('no-detection');
+    countsEl.classList.remove('detecting');
+}
+
+function hideCameraIcon() {
+    cameraIcon.style.display = 'none';
+}
+
+function createOverlay() {
+    canvasOverlay = document.createElement('canvas');
+    canvasOverlay.style.position = 'absolute'; 
+    canvasOverlay.style.top = '0'; 
+    canvasOverlay.style.left = '0';
+    canvasOverlay.width = 640; 
+    canvasOverlay.height = 480; 
+    canvasOverlay.style.borderRadius = '20px'; 
+    canvasOverlay.style.pointerEvents = 'none';
+    ctxOverlay = canvasOverlay.getContext('2d');
+    document.querySelector('.video-container').appendChild(canvasOverlay);
+}
+
+async function initCamera() {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadedmetadata = r);
+}
+
+function startDetection() {
+    initCamera().then(() => {
+        createOverlay();
+        startBtn.disabled = true; 
+        stopBtn.disabled = false;
+        hideCameraIcon(); video.style.display = 'block'; video.play();
+        countsEl.innerHTML = '<div class="counts-list">🔍<br>Detecting...</div>'; 
+        countsEl.classList.add('detecting');
+        intervalId = setInterval(sendFrameForDetection, 400);
+    }).catch(() => startBtn.disabled = false);
+}
+
+function stopDetection() {
+    if (intervalId) clearInterval(intervalId); intervalId = null; inFlight = false;
+    showCameraIcon();
+    startBtn.disabled = false; stopBtn.disabled = true;
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+}
+
+async function sendFrameForDetection() {
+    if (!video.videoWidth || video.paused || inFlight) return;
+    inFlight = true;
+
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCanvas.width = video.videoWidth; tempCanvas.height = video.videoHeight;
+    tempCtx.drawImage(video, 0, 0);
+
+    tempCanvas.toBlob(async (blob) => {
+        try {
+            const formData = new FormData(); formData.append('image', blob);
+            const res = await fetch('/detect', { method: 'POST', body: formData });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            ctxOverlay.clearRect(0, 0, 640, 480);
+
+            // Counts right beside camera
+            if (data.counts && Object.keys(data.counts).length > 0) {
+                const countItems = Object.entries(data.counts)
+                    .map(([cls, cnt]) => `<div><strong>${cls}: ${cnt}</strong></div>`)
+                    .join('');
+                countsEl.innerHTML = `<div class="counts-list">${countItems}</div>`;
+                countsEl.classList.remove('no-detection', 'detecting');
+            } else {
+                countsEl.innerHTML = '<div class="counts-list">No objects</div>'; 
+                countsEl.classList.add('no-detection');
+            }
+
+            // Boxes with labels
+            if (data.objects?.length > 0) {
+                data.objects.forEach(obj => {
+                    const [x1,y1,x2,y2] = obj.box;
+                    ctxOverlay.strokeStyle = '#00ff41'; ctxOverlay.lineWidth = 3;
+                    ctxOverlay.shadowColor = 'rgba(0,255,65,0.5)';
+                    ctxOverlay.shadowBlur = 8;
+                    ctxOverlay.strokeRect(x1, y1, x2-x1, y2-y1);
+
+                    const text = obj.label;
+                    ctxOverlay.font = 'bold 18px Segoe UI';
+                    const tw = ctxOverlay.measureText(text).width;
+                    ctxOverlay.fillStyle = 'rgba(0,255,65,0.9)'; 
+                    ctxOverlay.fillRect(x1, Math.max(0,y1-25), tw+10, 24);
+                    ctxOverlay.fillStyle = '#000'; ctxOverlay.textAlign = 'left'; 
+                    ctxOverlay.textBaseline = 'middle';
+                    ctxOverlay.fillText(text, x1+5, Math.max(14,y1-13));
+                });
+            }
+        } catch (e) {
+            countsEl.innerHTML = '<div class="counts-list">Error</div>'; 
             countsEl.classList.add('no-detection');
+        } finally {
+            inFlight = false;
         }
-
-        function hideCameraIcon() {
-            cameraIcon.style.display = 'none';
-        }
-
-        function createOverlay() {
-            canvasOverlay = document.createElement('canvas');
-            canvasOverlay.style.position = 'absolute'; canvasOverlay.style.top = '0'; canvasOverlay.style.left = '0';
-            canvasOverlay.width = 640; canvasOverlay.height = 480; canvasOverlay.style.borderRadius = '20px'; 
-            canvasOverlay.style.pointerEvents = 'none';
-            ctxOverlay = canvasOverlay.getContext('2d');
-            document.querySelector('.video-container').appendChild(canvasOverlay);
-        }
-
-        async function initCamera() {
-            stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
-            video.srcObject = stream;
-            await new Promise(r => video.onloadedmetadata = r);
-        }
-
-        function startDetection() {
-            initCamera().then(() => {
-                createOverlay();
-                startBtn.disabled = true; stopBtn.disabled = false;
-                hideCameraIcon(); video.style.display = 'block'; video.play();
-                countsEl.innerHTML = '<div class="counts-list">🔍<br>Detecting...</div>'; 
-                countsEl.classList.add('detecting');
-                intervalId = setInterval(sendFrameForDetection, 400);
-            }).catch(() => startBtn.disabled = false);
-        }
-
-        function stopDetection() {
-            if (intervalId) clearInterval(intervalId); intervalId = null; inFlight = false;
-            showCameraIcon();
-            startBtn.disabled = false; stopBtn.disabled = true;
-            if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-            video.srcObject = null;
-        }
-
-        async function sendFrameForDetection() {
-            if (!video.videoWidth || video.paused || inFlight) return;
-            inFlight = true;
-
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = video.videoWidth; tempCanvas.height = video.videoHeight;
-            tempCtx.drawImage(video, 0, 0);
-
-            tempCanvas.toBlob(async (blob) => {
-                try {
-                    const formData = new FormData(); formData.append('image', blob);
-                    const res = await fetch('/detect', { method: 'POST', body: formData });
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const data = await res.json();
-
-                    ctxOverlay.clearRect(0, 0, 640, 480);
-
-                    // Counts right beside camera
-                    if (data.counts && Object.keys(data.counts).length > 0) {
-                        const countItems = Object.entries(data.counts)
-                            .map(([cls, cnt]) => `<div><strong>${cls}: ${cnt}</strong></div>`)
-                            .join('');
-                        countsEl.innerHTML = `<div class="counts-list">${countItems}</div>`;
-                        countsEl.classList.remove('no-detection', 'detecting');
-                    } else {
-                        countsEl.innerHTML = '<div class="counts-list">No objects</div>'; 
-                        countsEl.classList.add('no-detection');
-                    }
-
-                    // Boxes (name only)
-                    if (data.objects?.length > 0) {
-                        data.objects.forEach(obj => {
-                            const [x1,y1,x2,y2] = obj.box;
-                            ctxOverlay.strokeStyle = '#00ff41'; ctxOverlay.lineWidth = 4;
-                            ctxOverlay.strokeRect(x1, y1, x2-x1, y2-y1);
-
-                            const text = obj.label;
-                            ctxOverlay.font = 'bold 20px Arial'; const tw = ctxOverlay.measureText(text).width;
-                            ctxOverlay.fillStyle = 'rgba(0,255,65,0.95)'; 
-                            ctxOverlay.fillRect(x1, Math.max(0,y1-30), tw+12, 28);
-                            ctxOverlay.fillStyle = '#000'; ctxOverlay.textAlign = 'left'; 
-                            ctxOverlay.textBaseline = 'middle';
-                            ctxOverlay.fillText(text, x1+6, Math.max(16,y1-14));
-                        });
-                    }
-                } catch (e) {
-                    countsEl.innerHTML = '<div class="counts-list">Error</div>'; 
-                    countsEl.classList.add('no-detection');
-                } finally {
-                    inFlight = false;
-                }
-            }, 'image/jpeg', 0.7);
-        }
-    </script>
+    }, 'image/jpeg', 0.7);
+}
+</script>
 </body>
 </html>
+
 
 
 
