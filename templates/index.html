@@ -1,67 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>YOLOv8 WebSocket Detection</title>
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<style>
-body { font-family: Arial; background:#f4f9fb; text-align:center }
-canvas, video { width:320px; height:240px; border-radius:10px }
-#counts { margin-top:15px; text-align:left; display:inline-block }
-</style>
+    <meta charset="UTF-8">
+    <title>Real-Time Object Detection</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f9fb; text-align: center; }
+        h1 { margin: 20px; }
+        button { padding: 12px 25px; border: none; background: #6ec7a1; color: white; font-size: 16px; border-radius: 20px; cursor: pointer; margin: 10px; }
+        .container { display: flex; justify-content: center; gap: 40px; margin-top: 20px; }
+        .box { background: white; padding: 15px; border-radius: 15px; }
+        video, canvas { width: 320px; height: 240px; border-radius: 10px; }
+        #info { margin-top: 30px; font-size: 18px; }
+    </style>
 </head>
-
 <body>
+    <h1>REAL-TIME OBJECT DETECTION</h1>
+    <button onclick="startDetection()">Start Detection</button>
+    <button onclick="stopDetection()">Stop Detection</button>
+    <div class="container">
+        <div class="box">
+            <h3>Input (Live Camera)</h3>
+            <video id="video" autoplay muted></video>
+        </div>
+        <div class="box">
+            <h3>Output (Detection)</h3>
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+    <div id="info">
+        <p><b>Total Objects Detected:</b> <span id="count">0</span></p>
+        <p id="desc">No objects detected</p>
+    </div>
 
-<h2>⚡ Zero-Delay Object Detection</h2>
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let interval;
 
-<video id="video" autoplay muted></video>
-<canvas id="canvas"></canvas>
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; });
 
-<div id="counts">Waiting...</div>
+        function startDetection() {
+            interval = setInterval(sendFrame, 120);
+        }
 
-<script>
-const socket = io();
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+        function stopDetection() {
+            clearInterval(interval);
+        }
 
-const smooth = {};
-const ALPHA = 0.6;
+        async function sendFrame() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            canvas.toBlob(async (blob) => {
+                let formData = new FormData();
+                formData.append('image', blob);
+                let res = await fetch('/detect', { method: 'POST', body: formData });
+                let data = await res.json();
 
-navigator.mediaDevices.getUserMedia({video:true})
-.then(s => video.srcObject = s);
+                let countEl = document.getElementById('count');
+                let descEl = document.getElementById('desc');
 
-function smoothBox(id, box){
-  if(!smooth[id]) return smooth[id]=box;
-  return smooth[id]=box.map((v,i)=>smooth[id][i]*ALPHA+v*(1-ALPHA));
-}
+                // Display per-class counts
+                if (data.counts && Object.keys(data.counts).length > 0) {
+                    countEl.innerHTML = Object.entries(data.counts)
+                        .map(([cls, cnt]) => `<strong>${cls}: ${cnt}</strong>`)
+                        .join(', ');
+                    descEl.innerText = `${data.count} total objects`;
+                } else {
+                    countEl.innerText = '0';
+                    descEl.innerText = 'No objects detected';
+                }
 
-setInterval(()=>{
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video,0,0);
-  socket.emit("frame", canvas.toDataURL("image/jpeg",0.5));
-}, 80); // ~12 FPS REALTIME
-
-socket.on("detections", data=>{
-  ctx.drawImage(video,0,0);
-
-  const count = {};
-  data.forEach((o,i)=>{
-    count[o.label]=(count[o.label]||0)+1;
-    const [x1,y1,x2,y2]=smoothBox(o.label+i,o.box);
-    ctx.strokeStyle="lime";
-    ctx.strokeRect(x1,y1,x2-x1,y2-y1);
-    ctx.fillText(o.label,x1+4,y1-6);
-  });
-
-  document.getElementById("counts").innerHTML =
-    Object.keys(count).length
-    ? Object.entries(count).map(([k,v])=>`${k}: ${v}`).join("<br>")
-    : "No objects";
-});
-</script>
-
+                // Redraw with boxes
+                ctx.drawImage(video, 0, 0);
+                data.objects.forEach(obj => {
+                    let [x1, y1, x2, y2] = obj.box;
+                    ctx.strokeStyle = 'lime';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                    ctx.fillStyle = 'lime';
+                    ctx.fillText(`${obj.label} (${obj.confidence})`, x1, y1 - 5);
+                });
+            }, 'image/jpeg');
+        }
+    </script>
 </body>
 </html>
