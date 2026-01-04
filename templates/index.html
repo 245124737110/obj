@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>YOLOv8 WebSocket Detection</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+body { font-family: Arial; background:#f4f9fb; text-align:center }
+canvas, video { width:320px; height:240px; border-radius:10px }
+#counts { margin-top:15px; text-align:left; display:inline-block }
+</style>
+</head>
+
+<body>
+
+<h2>⚡ Zero-Delay Object Detection</h2>
+
+<video id="video" autoplay muted></video>
+<canvas id="canvas"></canvas>
+
+<div id="counts">Waiting...</div>
+
+<script>
+const socket = io();
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const smooth = {};
+const ALPHA = 0.6;
+
+navigator.mediaDevices.getUserMedia({video:true})
+.then(s => video.srcObject = s);
+
+function smoothBox(id, box){
+  if(!smooth[id]) return smooth[id]=box;
+  return smooth[id]=box.map((v,i)=>smooth[id][i]*ALPHA+v*(1-ALPHA));
+}
+
+setInterval(()=>{
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video,0,0);
+  socket.emit("frame", canvas.toDataURL("image/jpeg",0.5));
+}, 80); // ~12 FPS REALTIME
+
+socket.on("detections", data=>{
+  ctx.drawImage(video,0,0);
+
+  const count = {};
+  data.forEach((o,i)=>{
+    count[o.label]=(count[o.label]||0)+1;
+    const [x1,y1,x2,y2]=smoothBox(o.label+i,o.box);
+    ctx.strokeStyle="lime";
+    ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    ctx.fillText(o.label,x1+4,y1-6);
+  });
+
+  document.getElementById("counts").innerHTML =
+    Object.keys(count).length
+    ? Object.entries(count).map(([k,v])=>`${k}: ${v}`).join("<br>")
+    : "No objects";
+});
+</script>
+
+</body>
+</html>
