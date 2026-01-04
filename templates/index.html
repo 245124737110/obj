@@ -6,7 +6,7 @@
   <title>Real-Time Object Detection</title>
 
   <style>
-    /* ===== Desktop/base (UNCHANGED look) ===== */
+    /* ===== Desktop/base (same as your original) ===== */
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
@@ -128,13 +128,12 @@
 
     canvas { border-radius: 20px; pointer-events: none; }
 
-    /* ===== Mobile ONLY overrides (laptop stays same) ===== */
+    /* Flip button hidden on desktop; visible on mobile only */
+    #flipBtn { display: none; }
+
+    /* ===== Mobile ONLY changes (desktop unchanged) ===== */
     @media (max-width: 767px) {
-      body {
-        display: block;         /* remove vertical centering only on mobile */
-        min-height: auto;
-        padding: 15px;
-      }
+      body { display: block; min-height: auto; padding: 15px; }
 
       .controls {
         display: flex;
@@ -143,14 +142,12 @@
         align-items: center;
       }
 
-      button {
-        margin: 0;
-        min-width: 250px;
-      }
+      button { margin: 0; min-width: 250px; }
+      #flipBtn { display: inline-block; }
 
       .detection-area {
         width: 100%;
-        height: auto;           /* allow content to flow top to bottom */
+        height: auto;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -164,7 +161,7 @@
         width: 100%;
         height: auto;
         max-width: 640px;
-        aspect-ratio: 4 / 3;    /* keeps 640x480 ratio */
+        aspect-ratio: 4 / 3;
       }
 
       .counts-panel {
@@ -186,6 +183,7 @@
 
   <div class="controls">
     <button id="startBtn" onclick="startDetection()">Start Detection</button>
+    <button id="flipBtn" onclick="flipCamera()" disabled>Flip Camera</button>
     <button id="stopBtn" onclick="stopDetection()" disabled>Stop Detection</button>
   </div>
 
@@ -205,7 +203,8 @@
     const cameraIcon = document.getElementById('cameraIcon');
     const countsEl = document.getElementById('counts');
     const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
+    const flipBtn  = document.getElementById('flipBtn');
+    const stopBtn  = document.getElementById('stopBtn');
 
     let stream = null;
     let intervalId = null;
@@ -213,6 +212,9 @@
     let canvasOverlay = null;
     let ctxOverlay = null;
     let inFlight = false;
+
+    // default: back camera on mobiles
+    let currentFacingMode = 'environment'; // 'environment' | 'user'
 
     function ensureOverlay() {
       const container = document.querySelector('.video-container');
@@ -228,7 +230,6 @@
         ctxOverlay = canvasOverlay.getContext('2d');
       }
 
-      // Match overlay to actual rendered video size
       const rect = container.getBoundingClientRect();
       canvasOverlay.width = Math.round(rect.width);
       canvasOverlay.height = Math.round(rect.height);
@@ -237,7 +238,6 @@
     function showCameraIcon() {
       video.style.display = 'none';
       cameraIcon.style.display = 'block';
-
       if (ctxOverlay && canvasOverlay) ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
 
       countsEl.innerHTML = '<div class="counts-list">Ready to<br>detect</div>';
@@ -249,27 +249,39 @@
       cameraIcon.style.display = 'none';
     }
 
-    async function initCamera() {
+    function stopStream() {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      video.srcObject = null;
+    }
+
+    async function startStreamWithFacingMode() {
+      stopStream();
+
+      // Use facingMode (ideal) for best compatibility across devices/browsers. 
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'environment' },
+        video: { width: 640, height: 480, facingMode: { ideal: currentFacingMode } },
         audio: false
       });
+
       video.srcObject = stream;
       await new Promise(r => (video.onloadedmetadata = r));
+      await video.play();
     }
 
     async function startDetection() {
       try {
-        await initCamera();
+        await startStreamWithFacingMode();
+
         hideCameraIcon();
         video.style.display = 'block';
-        await video.play();
 
         ensureOverlay();
         window.addEventListener('resize', ensureOverlay, { passive: true });
 
         startBtn.disabled = true;
         stopBtn.disabled = false;
+        flipBtn.disabled = false;
 
         countsEl.innerHTML = '<div class="counts-list"><br>Detecting...</div>';
         countsEl.classList.add('detecting');
@@ -282,18 +294,33 @@
       }
     }
 
+    async function flipCamera() {
+      currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+
+      // If not running, just keep mode for next start
+      if (!intervalId) return;
+
+      // Stop & restart stream before switching cameras
+      inFlight = false;
+      try {
+        await startStreamWithFacingMode();
+        ensureOverlay();
+      } catch (e) {
+        alert('Unable to flip camera on this device/browser.');
+      }
+    }
+
     function stopDetection() {
       if (intervalId) clearInterval(intervalId);
       intervalId = null;
       inFlight = false;
 
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(t => t.stop());
-        video.srcObject = null;
-      }
+      stopStream();
 
       startBtn.disabled = false;
       stopBtn.disabled = true;
+      flipBtn.disabled = true;
+
       showCameraIcon();
     }
 
@@ -303,14 +330,13 @@
 
       inFlight = true;
 
-      // Draw to a temp canvas at the camera's native size
       const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: false });
+      const tempCtx = tempCanvas.getContext('2d');
       tempCanvas.width = video.videoWidth;
       tempCanvas.height = video.videoHeight;
       tempCtx.drawImage(video, 0, 0);
 
-      // IMPORTANT: no 0.xx quality parameter here
+      // Note: no 0.xx quality parameter
       tempCanvas.toBlob(async (blob) => {
         try {
           const formData = new FormData();
@@ -332,7 +358,7 @@
             countsEl.classList.add('no-detection');
           }
 
-          // draw boxes scaled to overlay size
+          // draw boxes + LABEL ONLY (no confidence)
           ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
 
           const sx = canvasOverlay.width / 640;
@@ -353,7 +379,7 @@
               ctxOverlay.shadowBlur = 8;
               ctxOverlay.strokeRect(X, Y, W, H);
 
-              const text = `${obj.label} ${obj.confidence}`;
+              const text = obj.label; // ✅ only label
               ctxOverlay.font = 'bold 16px Segoe UI';
               const tw = ctxOverlay.measureText(text).width;
 
@@ -373,12 +399,12 @@
         } finally {
           inFlight = false;
         }
-      }, 'image/jpeg'); // <-- no 0.7 / 0.79
+      }, 'image/jpeg');
     }
 
-    // initial state
     showCameraIcon();
   </script>
 </body>
 </html>
+
 
