@@ -4,86 +4,98 @@
     <meta charset="UTF-8">
     <title>Real-Time Object Detection</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #f4f9fb; text-align: center; }
-        h1 { margin: 20px; }
+        body { font-family: Arial, sans-serif; background: #f4f9fb; text-align: center; padding: 20px; }
+        h1 { margin: 20px 0; }
         button { padding: 12px 25px; border: none; background: #6ec7a1; color: white; font-size: 16px; border-radius: 20px; cursor: pointer; margin: 10px; }
-        .container { display: flex; justify-content: center; gap: 40px; margin-top: 20px; }
-        .box { background: white; padding: 15px; border-radius: 15px; }
-        video, canvas { width: 320px; height: 240px; border-radius: 10px; }
-        #info { margin-top: 30px; font-size: 18px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #video { width: 640px; height: 480px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: none; }
+        #info { margin-top: 20px; font-size: 20px; padding: 15px; background: white; border-radius: 10px; display: inline-block; max-width: 640px; }
+        .count-display { font-weight: bold; color: #6ec7a1; margin: 10px 0; }
     </style>
 </head>
 <body>
     <h1>REAL-TIME OBJECT DETECTION</h1>
-    <button onclick="startDetection()">Start Detection</button>
-    <button onclick="stopDetection()">Stop Detection</button>
-    <div class="container">
-        <div class="box">
-            <h3>Input (Live Camera)</h3>
-            <video id="video" autoplay muted></video>
-        </div>
-        <div class="box">
-            <h3>Output (Detection)</h3>
-            <canvas id="canvas"></canvas>
-        </div>
-    </div>
+    <button id="startBtn" onclick="startDetection()">Start Detection</button>
+    <button id="stopBtn" onclick="stopDetection()" disabled>Stop Detection</button>
+    
+    <video id="video" autoplay muted playsinline></video>
+    
     <div id="info">
-        <p><b>Total Objects Detected:</b> <span id="count">0</span></p>
-        <p id="desc">No objects detected</p>
+        <p class="count-display" id="counts">No objects detected</p>
     </div>
 
     <script>
         let video = document.getElementById('video');
-        let canvas = document.getElementById('canvas');
-        let ctx = canvas.getContext('2d');
-        let interval;
+        let startBtn = document.getElementById('startBtn');
+        let stopBtn = document.getElementById('stopBtn');
+        let countsEl = document.getElementById('counts');
+        let stream = null;
+        let interval = null;
+        let animationId = null;
 
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => { video.srcObject = stream; });
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadedmetadata = r);
+                video.style.display = 'block';
+            } catch (err) {
+                alert('Camera access denied. Allow camera and refresh.');
+            }
+        }
 
         function startDetection() {
-            interval = setInterval(sendFrame, 120);
+            initCamera().then(() => {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                video.play();
+                detectLoop();
+            });
         }
 
         function stopDetection() {
-            clearInterval(interval);
+            if (interval) clearInterval(interval);
+            if (animationId) cancelAnimationFrame(animationId);
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            countsEl.innerHTML = 'Detection stopped';
+            video.style.display = 'none';
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
         }
 
-        async function sendFrame() {
+        async function detectLoop() {
+            if (!video.videoWidth) return requestAnimationFrame(detectLoop);
+            
+            let canvas = document.createElement('canvas');
+            let ctx = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
+            
             canvas.toBlob(async (blob) => {
                 let formData = new FormData();
                 formData.append('image', blob);
-                let res = await fetch('/detect', { method: 'POST', body: formData });
-                let data = await res.json();
-
-                let countEl = document.getElementById('count');
-                let descEl = document.getElementById('desc');
-
-                // Display per-class counts
-                if (data.counts && Object.keys(data.counts).length > 0) {
-                    countEl.innerHTML = Object.entries(data.counts)
-                        .map(([cls, cnt]) => `<strong>${cls}: ${cnt}</strong>`)
-                        .join(', ');
-                    descEl.innerText = `${data.count} total objects`;
-                } else {
-                    countEl.innerText = '0';
-                    descEl.innerText = 'No objects detected';
+                try {
+                    let res = await fetch('/detect', { method: 'POST', body: formData });
+                    let data = await res.json();
+                    
+                    // Update counts only (no total)
+                    if (data.counts && Object.keys(data.counts).length > 0) {
+                        countsEl.innerHTML = Object.entries(data.counts)
+                            .map(([cls, cnt]) => `<strong>${cls}: ${cnt}</strong>`)
+                            .join(', ');
+                    } else {
+                        countsEl.innerHTML = 'No objects detected';
+                    }
+                } catch (err) {
+                    countsEl.innerHTML = 'Detection error';
                 }
+            }, 'image/jpeg', 0.8);
 
-                // Redraw with boxes
-                ctx.drawImage(video, 0, 0);
-                data.objects.forEach(obj => {
-                    let [x1, y1, x2, y2] = obj.box;
-                    ctx.strokeStyle = 'lime';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-                    ctx.fillStyle = 'lime';
-                    ctx.fillText(`${obj.label} (${obj.confidence})`, x1, y1 - 5);
-                });
-            }, 'image/jpeg');
+            animationId = requestAnimationFrame(detectLoop);
         }
     </script>
 </body>
